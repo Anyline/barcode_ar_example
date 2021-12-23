@@ -25,6 +25,7 @@
 @property (nonatomic, strong) ALBarcodeScanViewPlugin *barcodeScanViewPlugin;
 @property (nullable, nonatomic, strong) ALScanView *scanView;
 @property (nullable, nonatomic, strong) UIView * arview;
+@property (nullable, nonatomic, strong) UIView * arLabelsView;
 
 // A debug label to show scanned results
 @property (nonatomic, strong) ALBarcodeResult* lastBarcodeResult;
@@ -32,7 +33,7 @@
 @property (nonatomic, strong) UIButton *scanButton;
 @property (nonatomic, strong) NSTimer *fadeTimer;
 @property (nonatomic, strong) UISwitch *multiBarcode;
-
+@property (nonatomic, strong) NSMutableArray * arLabels;
 @property (nonatomic, strong) NSArray<NSString *> *defaultReadableSymbologies;
 
 @end
@@ -112,6 +113,7 @@
     self.resultLabel.adjustsFontSizeToFitWidth = YES;
     self.resultLabel.numberOfLines = 0;
     
+    
     [self.view addSubview:self.resultLabel];
     
     self.controllerType = ALScanHistoryBarcode;
@@ -179,11 +181,30 @@
     [self.scanView addSubview:feedback];
     
     
+    // Create the AR view that will contain the feedback
     self.arview = [[UIView alloc] initWithFrame:self.scanView.frame];
     self.arview.backgroundColor = [UIColor clearColor];
     self.arview.userInteractionEnabled = NO;
-    
     [self.view addSubview:self.arview];
+
+    // Create 30 hidden labels in self.arLabelsView
+    // This labels will be used as the floating header above the barcode
+    self.arLabelsView = [[UIView alloc] initWithFrame:self.scanView.frame];
+    self.arLabelsView.backgroundColor = [UIColor clearColor];
+    self.arLabelsView.userInteractionEnabled = NO;
+    [self.view addSubview:self.arLabelsView];
+
+    self.arLabels = [NSMutableArray array];
+    for (int i = 0; i < 30; i++) {
+        UILabel * l = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 200, 20)];
+        l.textColor = [UIColor blueColor];
+        l.backgroundColor = [UIColor colorWithWhite:1 alpha:0.8];
+        l.layer.cornerRadius = 0.5;
+        l.hidden = YES;
+        l.textAlignment = NSTextAlignmentCenter;
+        [self.arLabels addObject:l];
+        [self.arLabelsView addSubview:l];
+    }
 }
 
 #pragma mark - IBAction methods
@@ -291,18 +312,36 @@
             NSInteger py = (NSInteger)square.upLeft.y;
             [feedbackPath addLineToPoint:CGPointMake(px, py)];
         }
-        // Store the paths in the feedback array
-        [feedback addObject:feedbackPath];
+        // Store the path and the value in the feedback array
+        [feedback addObject:@{
+            @"feedback": feedbackPath,
+            @"value": barcode.value ? barcode.value : barcode.base64
+        }];
     }
     
+    for (UILabel * l in self.arLabels) {
+        l.hidden = YES;
+    }
+    
+    NSInteger labelIndex = 0;
     // Iterate over the UIBezierPaths and add them to self.arview.layer
-    for (UIBezierPath * path in feedback) {
+    for (NSDictionary * dict in feedback) {
+        // Get the value and update the label
+        NSString* txt = [dict valueForKey:@"value"];
+        UILabel * l = [self.arLabels objectAtIndex:labelIndex];
+        l.hidden = NO;
+        l.text = txt;
+        l.center = CGPointMake(path.bounds.origin.x + path.bounds.size.width/2, path.bounds.origin.y - 30);
+        
+        // Draw the path onto the view
+        UIBezierPath* path = [dict valueForKey:@"feedback"];
         CAShapeLayer* layer = [CAShapeLayer new];
-        layer.lineWidth   = 2;
+        layer.lineWidth   = 3;
         layer.path        = path.CGPath;
-        layer.strokeColor = [UIColor redColor].CGColor;
-        layer.fillColor   = [UIColor greenColor].CGColor;
+        layer.strokeColor = [UIColor blueColor].CGColor;
+        layer.fillColor   = [UIColor colorWithRed:0 green:0.4 blue:0 alpha:0.8].CGColor;
         [self.arview.layer addSublayer:layer];
+        labelIndex++;
     }
     
     self.lastBarcodeResult = scanResult;
